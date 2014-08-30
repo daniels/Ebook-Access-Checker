@@ -10,6 +10,24 @@ module AccessChecker
     include AccessChecker::Checkers
     def self.run
 
+      checker_classes = { "apb"    => ApabiEbooks,
+                          "asp"    => AlexanderStreetPress,
+                          "duphw"  => DukeUniversityPress,
+                          "ebr"    => Ebrary,
+                          "ebs"    => EbscoHostEbookCollection,
+                          "end"    => Endeca,
+                          "fmgfod" => FMGFilmsOnDemand,
+                          "nccorv" => NCCO,
+                          "sabov"  => SabinAmerica,
+                          "scid"   => ScienceDirectEbooks,
+                          "skno"   => SAGEKnowledge,
+                          "spr"    => SpringerLink,
+                          "srmo"   => SAGEResearchMethodsOnline,
+                          "ss"     => SerialsSolutions,
+                          "upso"   => UniversityPressScholarshipOnline,
+                          "wol"    => WileyOnlineLibrary,
+                        }
+
       puts "-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-="
       puts "What platform/package are you access checking?"
       puts "Type one of the following:"
@@ -33,6 +51,8 @@ module AccessChecker
 
       package = ask("Package?  ")
 
+      checker_class = checker_classes[package]
+
       puts "\nPreparing to check access...\n"
 
       input = ARGV[0]
@@ -55,9 +75,12 @@ module AccessChecker
 
       sleeptime = 1
 
-      if package == "spr"
-          b.css = false
-          b.javascript_enabled = false
+      case package
+      when "fmgfod"
+        sleeptime = 10
+      when "spr"
+        b.css = false
+        b.javascript_enabled = false
       end
 
       csv_data.each do |r|
@@ -65,40 +88,7 @@ module AccessChecker
         url = row_array.pop
         rest_of_data = row_array
 
-        access = if package == "apb"
-          ApabiEbooks.new(b, url).result
-        elsif package == "asp"
-          AlexanderStreetPress.new(b, url).result
-        elsif package == "duphw"
-          DukeUniversityPress.new(b, url).result
-        elsif package == "ebr"
-          Ebrary.new(b, url).result
-        elsif package == "ebs"
-          EbscoHostEbookCollection.new(b, url).result
-        elsif package == "end"
-          Endeca.new(b, url).result
-        elsif package == "fmgfod"
-          sleeptime = 10
-          FMGFilmsOnDemand.new(b, url).result
-        elsif package == "nccorv"
-          NCCO.new(b, url).result
-        elsif package == "sabov"
-          SabinAmerica.new(b, url).result
-        elsif package == "scid"
-          ScienceDirectEbooks.new(b, url).result
-        elsif package == "skno"
-          SAGEKnowledge.new(b, url).result
-        elsif package == "spr"
-          SpringerLink.new(b, url).result
-        elsif package == "srmo"
-          SAGEResearchMethodsOnline.new(b, url).result
-        elsif package == "ss"
-          SerialsSolutions.new(b, url).result
-        elsif package == "upso"
-          UniversityPressScholarshipOnline.new(b, url).result
-        elsif package == 'wol'
-          WileyOnlineLibrary.new(b, url).result
-        end
+        access = checker_class.new(b, url).result
 
         CSV.open(output, "a") do |c|
           c << [rest_of_data, url, access].flatten
