@@ -10,48 +10,23 @@ module AccessChecker
     include AccessChecker::Checkers
     def self.run
 
-      checker_classes = { "apb"    => ApabiEbooks,
-                          "asp"    => AlexanderStreetPress,
-                          "duphw"  => DukeUniversityPress,
-                          "ebr"    => Ebrary,
-                          "ebs"    => EbscoHostEbookCollection,
-                          "end"    => Endeca,
-                          "fmgfod" => FMGFilmsOnDemand,
-                          "nccorv" => NCCO,
-                          "sabov"  => SabinAmerica,
-                          "scid"   => ScienceDirectEbooks,
-                          "skno"   => SAGEKnowledge,
-                          "spr"    => SpringerLink,
-                          "srmo"   => SAGEResearchMethodsOnline,
-                          "ss"     => SerialsSolutions,
-                          "upso"   => UniversityPressScholarshipOnline,
-                          "wol"    => WileyOnlineLibrary,
-                        }
+      checkers = Checkers.by_key
+      max_key_length = checkers.keys.map { |key| key.length }.max
 
       puts "-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-="
       puts "What platform/package are you access checking?"
       puts "Type one of the following:"
-      puts "  apb    : Apabi ebooks"
-      puts "  asp    : Alexander Street Press links"
-      puts "  duphw  : Duke University Press (via HighWire)"
-      puts "  ebr    : Ebrary links"
-      puts "  ebs    : EBSCOhost ebook collection"
-      puts "  end    : Endeca - Check for undeleted records"
-      puts "  fmgfod : FMG Films on Demand"
-      puts "  nccorv : NCCO - Check for related volumes"
-      puts "  sabov  : Sabin Americana - Check for Other Volumes"
-      puts "  scid   : ScienceDirect ebooks (Elsevier)"
-      puts "  spr    : SpringerLink links"
-      puts "  skno   : SAGE Knowledge links"
-      puts "  srmo   : SAGE Research Methods Online links"
-      puts "  ss     : SerialsSolutions links"
-      puts "  upso   : University Press (inc. Oxford) Scholarship Online links"
-      puts "  wol    : Wiley Online Library"
+
+      checkers.keys.sort.each do |key|
+        description = checkers[key].description
+        puts sprintf("  %-#{max_key_length}s : %s", key, description)
+      end
+
       puts "-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-="
 
       package = ask("Package?  ")
 
-      checker_class = checker_classes[package]
+      checker_class = checkers.fetch(package).klass
 
       puts "\nPreparing to check access...\n"
 

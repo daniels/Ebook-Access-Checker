@@ -1,7 +1,33 @@
+require 'ostruct'
 module AccessChecker
+
   module Checkers
 
+    class DuplicateKeyError < ArgumentError; end
+
+    def self.by_key
+      @checkers_by_key ||= {}
+    end
+
+    def self.register(klass, key, description=nil)
+      key = String(key)
+      if self.by_key[key].nil?
+        description = description || klass.name
+        entry = OpenStruct.new(:klass => klass, :description => description)
+        self.by_key[key] = entry
+      else
+        raise DuplicateKeyError, "%s is already registered for %s" % [
+          key.inspect,
+          self.by_key[key].klass.name,
+        ]
+      end
+    end
+
     class BaseChecker
+
+      def self.register(key, description=nil)
+        Checkers.register(self, key, description)
+      end
 
       attr_reader :b, :url, :page
 
@@ -27,6 +53,7 @@ module AccessChecker
     end
 
     class ApabiEbooks < BaseChecker
+      register "apb", "Apabi ebooks"
       def verify
         if page.match(/type="onlineread"/)
           access = "Access probably ok"
@@ -37,6 +64,7 @@ module AccessChecker
     end
 
     class AlexanderStreetPress < BaseChecker
+      register "asp", "Alexander Street Press links"
       def verify
         if page.include?("Page Not Found")
           access = "Page not found"
@@ -51,6 +79,7 @@ module AccessChecker
     end
 
     class DukeUniversityPress < BaseChecker
+      register "duphw", "Duke University Press (via HighWire)"
       def verify
         if page.include?("DOI Not Found")
           access = "DOI error"
@@ -81,6 +110,7 @@ module AccessChecker
     end
 
     class Ebrary < BaseChecker
+      register "ebr", "Ebrary links"
       def verify
         if page.include?("Document Unavailable\.")
           access = "No access"
@@ -93,6 +123,7 @@ module AccessChecker
     end
 
     class EbscoHostEbookCollection < BaseChecker
+      register "ebs", "EBSCOhost ebook collection"
       def verify
         if page.match(/class="std-warning-text">No results/)
           access = "No access"
@@ -105,6 +136,7 @@ module AccessChecker
     end
 
     class Endeca < BaseChecker
+      register "end", "Endeca - Check for undeleted records"
       def verify
         if page.include?("Invalid record")
           access = "deleted OK"
@@ -115,6 +147,7 @@ module AccessChecker
     end
 
     class FMGFilmsOnDemand < BaseChecker
+      register "fmgfod", "FMG Films on Demand"
       def verify
         if page.include?("The title you are looking for is no longer available")
           access = "No access"
@@ -127,6 +160,7 @@ module AccessChecker
     end
 
     class NCCO < BaseChecker
+      register "nccorv", "NCCO - Check for related volumes"
       def verify
         if page.match(/<div id="relatedVolumes">/)
           access = "related volumes section present"
@@ -137,6 +171,7 @@ module AccessChecker
     end
 
     class SabinAmerica < BaseChecker
+      register "sabov", "Sabin Americana - Check for Other Volumes"
       def verify
         if page.match(/<a name="otherVols">/)
           access = "other volumes section present"
@@ -148,6 +183,7 @@ module AccessChecker
     end
 
     class ScienceDirectEbooks < BaseChecker
+      register "scid", "ScienceDirect ebooks (Elsevier)"
       def verify
         if page.match(/<td class=nonSerialEntitlementIcon><span class="sprite_nsubIcon_sci_dir"/)
           access = "Restricted access"
@@ -160,6 +196,7 @@ module AccessChecker
     end
 
     class SAGEKnowledge < BaseChecker
+      register "skno", "SAGE Knowledge links"
       def verify
         if page.include?("Page Not Found")
           access = "No access - page not found"
@@ -176,6 +213,7 @@ module AccessChecker
     end
 
     class SpringerLink < BaseChecker
+      register "spr", "SpringerLink links"
       def verify
         if page.match(/viewType="Denial"/) != nil
           access = "Restricted access"
@@ -192,6 +230,7 @@ module AccessChecker
     end
 
     class SAGEResearchMethodsOnline < BaseChecker
+      register "srmo", "SAGE Research Methods Online links"
       def verify
         if page.include?("Page Not Found")
           access = "No access - page not found"
@@ -204,6 +243,7 @@ module AccessChecker
     end
 
     class SerialsSolutions < BaseChecker
+      register "ss", "SerialsSolutions links"
       def verify
         if page.include? "SS_NoJournalFoundMsg"
           access = "No access indicated"
@@ -216,6 +256,7 @@ module AccessChecker
     end
 
     class UniversityPressScholarshipOnline < BaseChecker
+      register "upso", "University Press (inc. Oxford) Scholarship Online links"
       def verify
         if page.include?("<div class=\"contentRestrictedMessage\">")
           access = "Restricted access"
@@ -230,6 +271,7 @@ module AccessChecker
     end
 
     class WileyOnlineLibrary < BaseChecker
+      register "wol", "Wiley Online Library"
       def verify
         if page.include?("You have full text access to this content")
           access = "Full access"
