@@ -1,4 +1,3 @@
-require 'ostruct'
 module AccessChecker
 
   # Container for checker classes
@@ -17,6 +16,8 @@ module AccessChecker
 
     class DuplicateKeyError < ArgumentError; end
 
+    CheckerEntry = Struct.new(:klass, :description)
+
     # Returns a hash with all known checker classes. Each hash value is an open
     # struct with the members +klass+ and +description+.
     def self.by_key
@@ -29,8 +30,7 @@ module AccessChecker
       key = String(key)
       if self.by_key[key].nil?
         description = description || klass.name
-        entry = OpenStruct.new(:klass => klass, :description => description)
-        self.by_key[key] = entry
+        self.by_key[key] = CheckerEntry.new(klass, description)
       else
         raise DuplicateKeyError, "%s is already registered for %s" % [
           key.inspect,

@@ -7,7 +7,6 @@ require 'access_checker'
 
 module AccessChecker
   class CLI
-    include AccessChecker::Checkers
     def self.run
 
       checkers = Checkers.by_key
@@ -46,7 +45,6 @@ module AccessChecker
       end
 
       b = Celerity::Browser.new(:browser => :firefox)
-      #b = Celerity::Browser.new(:browser => :firefox, :log_level => :all)
 
       sleeptime = 1
 
