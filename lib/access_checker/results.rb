@@ -10,10 +10,7 @@ module AccessChecker
   #
   module Results
 
-    # Base class for all results that defines the interface
-    #
-    # Each result has a #name based on the class name, and an accessor
-    # #message, that is set on initialization.
+    # Base class for all results and defines the interface
     #
     # This class is not intended to instantiated, only subclassed
     Result = Struct.new(:message) do
@@ -26,7 +23,7 @@ module AccessChecker
       end
 
       def to_s
-        "#<#{ [name, message].compact.join(": ") }>"
+        "#<#{ [name, @message].compact.join(": ") }>"
       end
     end
 

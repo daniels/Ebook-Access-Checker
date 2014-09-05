@@ -9,7 +9,7 @@ Gem::Specification.new do |spec|
   spec.authors       = ["Kristina Spurgin", "Daniel Sandbecker"]
   spec.email         = ["daniel.sandbecker@gmail.com"]
   spec.summary       = %q{A script to check for full-text access to e-resource titles.}
-  spec.description   = %q{A ruby librarey to check for full-text access to e-resource titles. Plain old URL/link checking won't alert you if one of your ebook links points to a valid HTML page reading "NO ACCESS." This script will.}
+  spec.description   = %q{A ruby library to check for full-text access to e-resource titles. Plain old URL/link checking won't alert you if one of your ebook links points to a valid HTML page reading "NO ACCESS." This script will.}
   spec.homepage      = ""
   spec.license       = "GNU General Public License v3 or later"
 

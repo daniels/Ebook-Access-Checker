@@ -5,8 +5,8 @@ module AccessChecker
   #
   # Keeps a registry of known checker classes.
   #
-  # A checker class MUST have an initializer accepting a browser and an url,
-  # and it must respond to #result.
+  # A checker class MUST have an initializer accepting a Capybara session and an
+  # URL, and it must respond to #result.
   #
   # A checker class SHOULD be defined in the AccessChecker::Checkers namespace.
   # (This is currently not enforced, but may be in the future.)
@@ -18,6 +18,7 @@ module AccessChecker
 
     class DuplicateKeyError < ArgumentError; end
 
+    # Value object class used for the Checkers registry
     CheckerEntry = Struct.new(:klass, :description)
 
     # Returns a hash with all known checker classes. Each hash value is an open
@@ -75,7 +76,7 @@ module AccessChecker
         @url = url
       end
 
-      # Implementation of the required method for checker classes.
+      # Default implementation of the required method for checker classes.
       #
       # Normally this shouldn't be overridden. It is preferred to override
       # #setup and/or #verify instead.
@@ -162,10 +163,7 @@ module AccessChecker
           # Celerity couldn't handle opening the fulltext content pages that actually work,
           #  so I switch here to using open-uri to grab the HTML
 
-          thepage = ""
-          open(content_url) {|f|
-            f.each_line {|line| thepage << line}
-            }
+          thepage = open(content_url) {|f| f.read }
 
           if thepage.include?("Log in to the e-Duke Books Scholarly Collection site")
             NoAccessResult.new
