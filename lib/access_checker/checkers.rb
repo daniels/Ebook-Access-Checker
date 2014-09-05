@@ -1,3 +1,4 @@
+require 'access_checker/results'
 module AccessChecker
 
   # Container for checker classes
@@ -12,6 +13,7 @@ module AccessChecker
   #
   # A checker class SHOULD be registered through AccessChecker::Checkers.register
   # to enable use through Access::Checker::CLI.
+  #
   module Checkers
 
     class DuplicateKeyError < ArgumentError; end
@@ -42,25 +44,34 @@ module AccessChecker
     # Base class that defines the interface for checkers, and provides default
     # implementations for some of the methods
     #
-    #
     # A subclass of BaseChecker SHOULD implement #verify for the actual access
-    # checking logic and MAY override #visit to perform any extra navigation steps needed.
+    # checking logic and MAY override #setup to perform any extra preparation
+    # and/or navigation steps.
     #
     # A subclass of BaseChecker MAY instead directly override #result and
     # provide it's own navigation and access checking logic.
     #
     class BaseChecker
 
+      include Results
+
+      PRIVATE_INTERFACE = [:setup, :verify]
+
+      # Tries to keep the internal interface methods private even in subclasses
+      def self.method_added(method)
+        private method if PRIVATE_INTERFACE.include? method
+      end
+
       # Registers the class in AccessChecker::Checkers::by_key
       def self.register(key, description=nil)
         Checkers.register(self, key, description)
       end
 
-      attr_reader :b, :url, :page
+      attr_reader :session, :url
 
       # Accepts a celerity browser instance and a URL string
-      def initialize(browser, url)
-        @b = browser
+      def initialize(session, url)
+        @session = session
         @url = url
       end
 
@@ -71,8 +82,10 @@ module AccessChecker
       #
       def result
         setup
-        verify || "No rule matched"
+        verify || NoRuleMatchedResult.new("No rule matced (default fallback)")
       end
+
+      private
 
       # Performs the needed navigation to set the browser up for verification of
       # access. By default only visits url and sets @page to the found html
@@ -80,11 +93,8 @@ module AccessChecker
       # May be overrided by subclasses that needs extra navigation steps
       #
       def setup
-        b.goto url
-        @page = b.html
+        session.visit url
       end
-
-      private
 
       # Subclasses should implement this with the logic for verifying access
       #
@@ -106,10 +116,9 @@ module AccessChecker
       private
 
       def verify
-        if page.match(/type="onlineread"/)
-          access = "Access probably ok"
-        else
-          access = "Check access manually"
+        case
+        when session.html.match(/type="onlineread"/)
+          ProbableFullAccessResult.new
         end
       end
     end
@@ -121,14 +130,13 @@ module AccessChecker
       private
 
       def verify
-        if page.include?("Page Not Found")
-          access = "Page not found"
-        elsif page.include?("error")
-          access = "Error returned"
-        elsif page.include?("Browse")
-            access = "Full access"
-        else
-          access = "Check access manually"
+        case
+        when session.html.include?("Page Not Found")
+          PageNotFoundResult.new
+        when session.html.include?("error")
+          ErrorResult.new
+        when session.html.include?("Browse")
+          FullAccessResult.new
         end
       end
 
@@ -141,13 +149,14 @@ module AccessChecker
       private
 
       def verify
-        if page.include?("DOI Not Found")
-          access = "DOI error"
+        case
+        when session.html.include?("DOI Not Found")
+          DOIErrorResult.new
         else
           require 'open-uri'
           # I could find nothing on the ebook landing page to differentiate those to which we have full text access from those to which we do not.
           # This requires an extra step of having the checker visit one of the content pages, and testing whether one gets the content, or a log-in page
-          url_title_segment = page.match(/http:\/\/reader\.dukeupress\.edu\/([^\/]*)\/\d+/).captures[0]
+          url_title_segment = session.html.match(/http:\/\/reader\.dukeupress\.edu\/([^\/]*)\/\d+/).captures[0]
           content_url = "http://reader.dukeupress.edu/#{url_title_segment}/25"
 
           # Celerity couldn't handle opening the fulltext content pages that actually work,
@@ -159,11 +168,9 @@ module AccessChecker
             }
 
           if thepage.include?("Log in to the e-Duke Books Scholarly Collection site")
-            access = "No access"
+            NoAccessResult.new
           elsif thepage.include?("t-page-nav-arrows")
-            access = "Full access"
-          else
-            access = "Check access manually"
+            FullAccessResult.new
           end
         end
       end
@@ -171,18 +178,16 @@ module AccessChecker
     end
 
     class Ebrary < BaseChecker
-
       register "ebr", "Ebrary links"
 
       private
 
       def verify
-        if page.include?("Document Unavailable\.")
-          access = "No access"
-        elsif page.include?("Date Published")
-          access = "Full access"
-        else
-          access = "Check access manually"
+        case
+        when session.html.include?("Document Unavailable\.")
+          NoAccessResult.new
+        when session.html.include?("Date Published")
+          FullAccessResult.new
         end
       end
 
@@ -195,12 +200,11 @@ module AccessChecker
       private
 
       def verify
-        if page.match(/class="std-warning-text">No results/)
-          access = "No access"
-        elsif page.include?("eBook Full Text")
-          access = "Full access"
-        else
-          access = "check"
+        case
+        when session.html.match(/class="std-warning-text">No results/)
+          NoAccessResult.new
+        when session.html.include?("eBook Full Text")
+          FullAccessResult.new
         end
       end
 
@@ -213,10 +217,11 @@ module AccessChecker
       private
 
       def verify
-        if page.include?("Invalid record")
-          access = "deleted OK"
+        case
+        when session.html.include?("Invalid record")
+          SuccessResult.new "Deleted OK"
         else
-          access = "possible ghost record - check"
+          FailureResult.new "Possible ghost record"
         end
       end
 
@@ -229,12 +234,11 @@ module AccessChecker
       private
 
       def verify
-        if page.include?("The title you are looking for is no longer available")
-          access = "No access"
-        elsif page.match(/class="now-playing-div/)
-          access = "Full access"
-        else
-          access = "Check access manually"
+        case
+        when session.html.include?("The title you are looking for is no longer available")
+          NoAccessResult.new
+        when session.html.match(/class="now-playing-div/)
+          FullAccessResult.new
         end
       end
 
@@ -247,10 +251,11 @@ module AccessChecker
       private
 
       def verify
-        if page.match(/<div id="relatedVolumes">/)
-          access = "related volumes section present"
+        case
+        when session.html.match(/<div id="relatedVolumes">/)
+          SuccessResult.new "related volumes section present"
         else
-          access = "no related volumes section"
+          FailureResult.new "no related volumes section"
         end
       end
 
@@ -263,10 +268,11 @@ module AccessChecker
       private
 
       def verify
-        if page.match(/<a name="otherVols">/)
-          access = "other volumes section present"
+        case
+        when session.html.match(/<a name="otherVols">/)
+          SuccessResult.new "other volumes section present"
         else
-          access = "no other volumes section"
+          FailureResult.new "no other volumes section"
         end
       end
 
@@ -278,13 +284,23 @@ module AccessChecker
 
       private
 
+      def setup
+        super
+        session.find("#sppart1 a").click if session.has_selector?("#sppart1 a")
+      end
+
       def verify
-        if page.match(/<td class=nonSerialEntitlementIcon><span class="sprite_nsubIcon_sci_dir"/)
-          access = "Restricted access"
-        elsif page.match(/title="You are entitled to access the full text of this document"/)
-          access = "Full access"
-        else
-          access = "check"
+        case
+        when session.has_selector?('span[title="You are not entitled to access the full text and this document is not for purchase."]')
+          RestrictedAccessResult.new
+        when session.html.match(/<td class=nonSerialEntitlementIcon><span class="sprite_nsubIcon_sci_dir"/)
+          RestrictedAccessResult.new
+        when session.html.match(/title="You are entitled to access the full text of this document"/)
+          FullAccessResult.new
+        when session.has_selector?('span[title="Entitled to full text"]', :minimum => 6)
+          FullAccessResult.new
+        when session.has_selector?('span[title="Entitled to full text"]', :minimum => 3)
+          ProbableFullAccessResult.new
         end
       end
 
@@ -297,16 +313,17 @@ module AccessChecker
       private
 
       def verify
-        if page.include?("Page Not Found")
-          access = "No access - page not found"
-        elsif page.include?("Users without subscription are not able to see the full content")
-          access = "Restricted access"
-        elsif page.match(/class="restrictedContent"/)
-          access = "Restricted access"
-        elsif page.match(/<p class="lockicon">/)
-          access = "Restricted access"
+        case
+        when session.html.include?("Page Not Found")
+          PageNotFoundResult.new
+        when session.html.include?("Users without subscription are not able to see the full content")
+          RestrictedAccessResult.new
+        when session.html.match(/class="restrictedContent"/)
+          RestrictedAccessResult.new
+        when session.html.match(/<p class="lockicon">/)
+          RestrictedAccessResult.new
         else
-          access = "Probable full access"
+          ProbableFullAccessResult.new
         end
       end
 
@@ -319,16 +336,16 @@ module AccessChecker
       private
 
       def verify
-        if page.match(/viewType="Denial"/) != nil
-          access = "Restricted access"
-        elsif page.match(/viewType="Full text download"/) != nil
-          access = "Full access"
-        elsif page.match(/DOI Not Found/) != nil
-          access = "DOI error"
-        elsif page.include?("Bookshop, Wageningen")
-          access = "wageningenacademic.com"
-        else
-          access = "Check access manually"
+        case
+        when session.html.match(/viewType="Denial"/) != nil
+          RestrictedAccessResult.new
+        when session.html.match(/viewType="Full text download"/) != nil
+          FullAccessResult.new
+        when session.html.match(/DOI Not Found/) != nil
+          DOIErrorResult.new
+        when session.html.include?("Bookshop, Wageningen")
+          NoAccessResult.new
+          "wageningenacademic.com"
         end
       end
 
@@ -341,12 +358,11 @@ module AccessChecker
       private
 
       def verify
-        if page.include?("Page Not Found")
-          access = "No access - page not found"
-        elsif page.include?("Add to Methods List")
-          access = "Probable full access"
-        else
-          access = "Check access manually"
+        case
+        when session.html.include?("Page Not Found")
+          PageNotFoundResult.new
+        when session.html.include?("Add to Methods List")
+          ProbableFullAccessResult.new
         end
       end
 
@@ -359,12 +375,11 @@ module AccessChecker
       private
 
       def verify
-        if page.include? "SS_NoJournalFoundMsg"
-          access = "No access indicated"
-        elsif page.include? "SS_Holding"
-          access = "Access indicated"
-        else
-          access = "Check access manually"
+        case
+        when session.html.include?("SS_NoJournalFoundMsg")
+          NoAccessResult.new "No access indicated"
+        when session.html.include?("SS_Holding")
+          FullAccessResult.new "Access indicated"
         end
       end
 
@@ -377,14 +392,13 @@ module AccessChecker
       private
 
       def verify
-        if page.include?("<div class=\"contentRestrictedMessage\">")
-          access = "Restricted access"
-        elsif page.include?("<div class=\"contentItem\">")
-          access = "Full access"
-        elsif page.include? "DOI Not Found"
-          access = "DOI Error"
-        else
-          access = "Check access manually"
+        case
+        when session.html.include?("<div class=\"contentRestrictedMessage\">")
+          RestrictedAccessResult.new
+        when session.html.include?("<div class=\"contentItem\">")
+          FullAccessResult.new
+        when session.html.include?("DOI Not Found")
+          DOIErrorResult.new
         end
       end
 
@@ -397,14 +411,13 @@ module AccessChecker
       private
 
       def verify
-        if page.include?("You have full text access to this content")
-          access = "Full access"
-        elsif page.include?("You have free access to this content")
-          access = "Full access (free)"
-        elsif page.include?("DOI Not Found")
-          access = "DOI error"
-        else
-          access = "Check access manually"
+        case
+        when session.html.include?("You have full text access to this content")
+          FullAccessResult.new
+        when session.html.include?("You have free access to this content")
+          FullAccessResult.new "Free"
+        when session.html.include?("DOI Not Found")
+          DOIErrorResult.new
         end
       end
 

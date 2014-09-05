@@ -6,10 +6,10 @@ require 'access_checker/version'
 Gem::Specification.new do |spec|
   spec.name          = "access_checker"
   spec.version       = AccessChecker::VERSION
-  spec.authors       = ["Kristina Spurgin"]
-  spec.email         = ["TODO: ADD EMAIL"]
+  spec.authors       = ["Kristina Spurgin", "Daniel Sandbecker"]
+  spec.email         = ["daniel.sandbecker@gmail.com"]
   spec.summary       = %q{A script to check for full-text access to e-resource titles.}
-  spec.description   = %q{A simple JRuby script to check for full-text access to e-resource titles. Plain old URL/link checking won't alert you if one of your ebook links points to a valid HTML page reading "NO ACCESS." This script will.}
+  spec.description   = %q{A ruby librarey to check for full-text access to e-resource titles. Plain old URL/link checking won't alert you if one of your ebook links points to a valid HTML page reading "NO ACCESS." This script will.}
   spec.homepage      = ""
   spec.license       = "GNU General Public License v3 or later"
 
@@ -18,9 +18,8 @@ Gem::Specification.new do |spec|
   spec.test_files    = spec.files.grep(%r{^(test|spec|features)/})
   spec.require_paths = ["lib"]
 
-  spec.platform = 'java'
-
-  spec.add_runtime_dependency 'celerity', '~> 0.9.2'
+  spec.add_runtime_dependency 'capybara', '~> 2.4.1'
+  spec.add_runtime_dependency 'poltergeist', '~> 1.5.1'
   spec.add_runtime_dependency 'highline', '~> 1.6.21'
 
   spec.add_development_dependency "bundler", "~> 1.6"
