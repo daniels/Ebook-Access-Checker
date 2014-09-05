@@ -6,14 +6,13 @@ require 'ostruct'
 require 'optparse'
 
 require 'access_checker'
-
-Dir[Dir.pwd + "/config/checkers/*.rb"].each do |checker|
-  require checker
-end
-
 module AccessChecker
+
+  # A command line interface for checking access on URL:s read from a CSV file
   class CLI
 
+    # Utility class that wraps checker/provider classes to handle some errors
+    # more gracefully
     class CheckerSession
       attr_reader :session, :provider_class
       def initialize(session, provider_class)
@@ -28,16 +27,26 @@ module AccessChecker
       end
     end
 
+    # Returns the options set for this run
     attr_reader :options
 
+    # Accepts an array of command line options and parameters. The array will be
+    # cleared from all processed options. Should normally be called with ARGV
     def initialize(args)
       @options = OpenStruct.new
       options_parser.parse!(args)
+
+      if options.include_dir
+        Dir[File.join(options.include_dir, "*.rb")].each { |f| load f }
+      end
+
       puts(provider_list) && exit if options.list_providers
       abort "You must supply a provider key" unless options.provider
       abort "#{options.provider} is not a valid provider" unless Checkers.by_key[options.provider]
     end
 
+    # Runs the checking on data in input IO stream. The default script calls
+    # this with ARGF after initializing with ARGV has cleared away all options.
     def run(input)
       checker = get_provider
       session = Capybara::Session.new(:poltergeist)
@@ -50,11 +59,13 @@ module AccessChecker
 
     private
 
+    # Returns the class of the provider specified by options.provider
     def get_provider
       checker_entry = Checkers.by_key.fetch(options.provider)
       checker_entry.klass
     end
 
+    # Returns a list of all available providers and their descriptions.
     def provider_list
       checkers = Checkers.by_key
       max_key_length = checkers.keys.map { |key| key.length }.max
@@ -69,6 +80,7 @@ module AccessChecker
       list
     end
 
+    # Returns the csv_options to be used, after parsing options
     def csv_options
       csv_options = {:col_sep => ';'}
 
@@ -80,6 +92,10 @@ module AccessChecker
       csv_options
     end
 
+    # Loops through input that should be an IO stream containting CSV, and
+    # passes each found URL to the checker_session
+    #
+    # Prints the same CSV with two extra columns for the checking result
     def filter(input, checker_session)
       CSV.filter(input, csv_options) do |row|
         if row.is_a? CSV::Row
@@ -103,13 +119,13 @@ module AccessChecker
       end
     end
 
-    def check(checker_class, session, url)
-      checker = checker_class.new(session, url)
-      checker.result
-    rescue URI::InvalidURIError => e
-      abort "#{url} is not a valid URL. (#{e})"
-    end
-
+    # Redirects $stdout to +file+, and set it to sync during the execution the
+    # supplied block.
+    #
+    # If file is nil or false, no redirection happens, but sync is set.
+    #
+    # When the block returns, $stdoyt is reset to it's original value, including
+    # the sync setting.
     def redirect_stdout_to(file)
       previous_stdout = $stdout.clone
       $stdout.reopen(file, "w") if file
@@ -120,14 +136,22 @@ module AccessChecker
       $stdout = previous_stdout
     end
 
+    # Utility method to fix OptionParsers inability to wrap parameter
+    # descriptions in a nice way.
+    #
+    # Word wraps supplied str to the specified width. Also strips any repeated
+    # whitespace, so strings might be written over multiple lines. To make line
+    # breaks in the description, separate strings must be used.
     def wrap(str, width=42)
       str.gsub(/(\s)+/, '\1').scan(/\S.{0,#{width}}\S(?=\s|$)|\S+/)
     end
 
+
+    # Defines the options for the CLI
     def options_parser
       @options_parser ||= OptionParser.new do |o|
-        o.banner = "Usage:\n  access_checker -p PROVIDER [options] [FILE [FILE [...]]"
-        o.separator "  access_checker -l"
+        o.banner = "Usage:\n    access_checker -p PROVIDER [options] [FILE [FILE [...]]"
+        o.separator "    access_checker -l"
 
 
         o.separator ""
@@ -148,6 +172,16 @@ module AccessChecker
                    order), URL:s will be read from that column.]),
         ){ options.headers = true }
 
+        o.on( "-I", "--include DIR",
+          *wrap(%q[Load all Ruby files in DIR. Use this to use your own checker
+                 without modifying the script.]),
+          *wrap(%q[If the custom checker are already on the load path, simply
+                   put a *.rb file in DIR with a require statement:]),
+          " ",
+          "    require 'path/to/checker'"
+        ){ |v| options.include_dir = v }
+
+        o.separator ""
         o.on(
           "-O",
           "--outfile OUTFILE",
@@ -160,19 +194,20 @@ module AccessChecker
 
         o.separator ""
 
-        o.separator "Common:"
-        o.on_tail("-h", "--help", "Show this message") { puts o.help; exit }
+        o.separator "Common options:"
+        o.on("-h", "--help", "Show this message") { puts o.help; exit }
 
-        o.on_tail("--version", "Show version") do
+        o.on("--version", "Show version") do
           puts AccessChecker::Version.join('.')
           exit
         end
 
         o.separator ""
-        o.separator "Checks if URL:s in FILE or STDIN leads to an accessible full text."
-        o.separator "Expects input to be in CSV format with URL:s in the last column."
+        o.separator "Description:"
+        o.separator "    Checks if URL:s in FILE or STDIN leads to an accessible full text."
+        o.separator "    Expects input to be in CSV format with URL:s in the last column."
         o.separator ""
-        o.separator "Output is the same CSV with the columns 'result' and 'comment' added."
+        o.separator "    Output is the same CSV with the columns 'result' and 'message' added."
 
       end
     end
