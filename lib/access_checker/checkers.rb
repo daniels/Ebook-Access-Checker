@@ -1,4 +1,4 @@
-require 'access_checker/results'
+require_relative '../access_checker/results'
 module AccessChecker
 
   # Container for checker classes

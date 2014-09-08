@@ -1,4 +1,4 @@
-#!/usr/bin/env jruby
-require 'access_checker/cli'
+#!/usr/bin/env ruby
+require_relative '../lib/access_checker/cli'
 
 AccessChecker::CLI.new(ARGV).run(ARGF)

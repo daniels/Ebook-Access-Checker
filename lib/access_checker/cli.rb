@@ -5,7 +5,7 @@ require 'open-uri'
 require 'ostruct'
 require 'optparse'
 
-require 'access_checker'
+require_relative '../access_checker'
 module AccessChecker
 
   # A command line interface for checking access on URL:s read from a CSV file

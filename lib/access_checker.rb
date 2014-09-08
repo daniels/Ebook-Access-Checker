@@ -1,5 +1,5 @@
-require "access_checker/version"
-require "access_checker/checkers"
+require_relative "access_checker/version"
+require_relative "access_checker/checkers"
 
 module AccessChecker
   # Your code goes here...
