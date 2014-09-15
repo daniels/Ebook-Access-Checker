@@ -11,20 +11,42 @@ module AccessChecker
   # A command line interface for checking access on URL:s read from a CSV file
   class CLI
 
-    # Utility class that wraps checker/provider classes to handle some errors
-    # more gracefully
-    class CheckerSession
-      attr_reader :session, :provider_class
-      def initialize(session, provider_class)
-        @session, @provider_class = session, provider_class
+    # Wraps a Capybara session and asserts that visited URL:s are guided through
+    # the proxy login
+    class ProxySession < SimpleDelegator
+      alias_method :session, :__getobj__
+
+      # Create a new proxy session, wrapping +session+ and using +user+ and
+      # +password+ for authentication.
+      def initialize(session, user, password)
+        super(session)
+        @user, @password = user, password
       end
 
-      def check(url)
-        provider = provider_class.new(session, url)
-        provider.result
-      rescue URI::InvalidURIError => e
-        abort "'#{url}' is not a valid URL (#{e.class})"
+      # Delegates to the wrapped session, but attempts to login to the proxy if
+      # the session is stuck on the proxy login page.
+      def visit(*args)
+        result = session.visit(*args)
+        result = login_to_proxy if on_proxy_login?
+        return result
       end
+
+      private
+
+      # Check if the session is stuck on the proxy login page.
+      def on_proxy_login?
+        session.current_path == "/login" && session.current_url.match(/[?&]qurl=/)
+      end
+
+      # Logs in to the proxy
+      def login_to_proxy
+        session.fill_in('user', :with => @user)
+        session.fill_in('pass', :with => @password)
+        result = session.find("input[type=submit]").click
+        raise "Couldn't log in through proxy" if on_proxy_login?
+        return result
+      end
+
     end
 
     # Returns the options set for this run
@@ -48,21 +70,32 @@ module AccessChecker
     # Runs the checking on data in input IO stream. The default script calls
     # this with ARGF after initializing with ARGV has cleared away all options.
     def run(input)
-      checker = get_provider
+      checker = get_checker_for_provider
       session = Capybara::Session.new(:poltergeist)
-      checker_session = CheckerSession.new(session, checker)
+
+      session = proxy_session(session) if options.proxy
 
       redirect_stdout_to(options.outfile) do
-        filter(input, checker_session)
+        filter(input, checker, session)
       end
+    rescue StandardError => e
+      abort "Aborting due to an error: #{e}"
+    rescue Interrupt => e
+      abort "Aborted (#{e.inspect})"
     end
 
     private
 
     # Returns the class of the provider specified by options.provider
-    def get_provider
+    def get_checker_for_provider
       checker_entry = Checkers.by_key.fetch(options.provider)
       checker_entry.klass
+    rescue KeyError => e
+      abort "Not a known provider: #{options.provider}. (#{e})"
+    end
+
+    def proxy_session(session)
+      ProxySession.new(session, options.proxy_user, options.proxy_password)
     end
 
     # Returns a list of all available providers and their descriptions.
@@ -96,7 +129,8 @@ module AccessChecker
     # passes each found URL to the checker_session
     #
     # Prints the same CSV with two extra columns for the checking result
-    def filter(input, checker_session)
+    def filter(input, checker_class, session)
+      input.lineno = 0
       CSV.filter(input, csv_options) do |row|
         if row.is_a? CSV::Row
           if options.url_header
@@ -113,10 +147,12 @@ module AccessChecker
           end
         end
         url ||= row[- 1]
-        result = checker_session.check url
+        result = checker_class.new(session, url).result
         row << result.name
         row << result.message
       end
+    rescue StandardError => e
+      abort "Error when processing line #{input.lineno}: #{e.inspect}"
     end
 
     # Redirects $stdout to +file+, and set it to sync during the execution the
@@ -135,6 +171,7 @@ module AccessChecker
       $stdout.close unless $stdout.closed? || $stdout === previous_stdout
       $stdout = previous_stdout
     end
+
 
     # Utility method to fix OptionParsers inability to wrap parameter
     # descriptions in a nice way.
@@ -191,6 +228,18 @@ module AccessChecker
         o.on( "-U", "--url-header HEADER",
           *wrap(%q[Read URL:s from the column specified by HEADER. (Implies `-h`.)])
         ){ |v| options.url_header = v; options.headers = true; }
+
+        o.on( "-x", "--proxy",
+          *wrap(%q[Login through EZproxy before checking.]),
+          *wrap(%q[Requires environment variables EZPROXY_USER and EZPROXY_PASSWORD to be set.])
+        ) do
+          options.proxy          = true
+          policy = Proc.new { |key|
+            abort "When using --proxy you must set the environment variable #{key}"
+          }
+          options.proxy_user     = ENV.fetch("EZPROXY_USER", &policy)
+          options.proxy_password = ENV.fetch("EZPROXY_PASSWORD", &policy)
+        end
 
         o.separator ""
 
