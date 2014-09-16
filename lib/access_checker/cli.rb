@@ -6,6 +6,12 @@ require 'ostruct'
 require 'optparse'
 
 require_relative '../access_checker'
+
+Capybara.register_driver :poltergeist do |app|
+  null_io = File.open(File::NULL, "w")
+  Capybara::Poltergeist::Driver.new(app, :phantomjs_logger => null_io)
+end
+
 module AccessChecker
 
   # A command line interface for checking access on URL:s read from a CSV file
