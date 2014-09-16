@@ -19,7 +19,7 @@ module AccessChecker
       end
 
       def message
-        String(@message)
+        String(self[:message])
       end
 
       def to_s
