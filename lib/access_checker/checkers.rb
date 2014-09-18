@@ -147,16 +147,6 @@ module AccessChecker
 
       register "daw", "Dawsonera eBooks"
 
-      # Makes sure Capybara Session timeout is set to at least 60 seconds during
-      # the ordinary setup. (Dawsonera is javascript heavy and can easily
-      # timeout with the default 30 seconds.)
-      def setup
-        old_timeout = session.driver.timeout
-        session.driver.timeout = [old_timeout, 90].max
-        super
-        session.driver.timeout = old_timeout
-      end
-
       def verify
         session.within ".result-features" do
           case
